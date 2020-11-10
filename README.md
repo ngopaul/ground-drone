@@ -4,7 +4,7 @@ EECS 149 (Embedded Systems) Project - live remote ground-based drone using PID c
 ## Development
 0. Update pip: `pip3 install --upgrade pip setuptools wheel`. 
 1. Clone the repo: `git clone https://github.com/ngopaul/ground-drone.git`.
-2. Create a virtual environment for python3: `python3 -m venv env`, and activate it: `source tutorial-env/bin/activate`.
+2. Create a virtual environment for python3: `python3 -m venv env`, and activate it: `source env/bin/activate`.
 3. Install the python dependencies from requirements.txt: `pip3 install -r requirements.txt`.
 
 ## Running the interface
