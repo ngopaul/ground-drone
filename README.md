@@ -28,8 +28,10 @@ EECS 149 (Embedded Systems) Project - live remote ground-based drone with human 
 2. Follow the online training: https://training.ti.com/node/1139680 (only setup required)
    - setup is the first lab: https://www.ti.com/lit/ml/sekp066/sekp066.pdf (required)
       - the zip file mentioned in the lab must be downloaded. It contains libraries which provide basic hardware functions (UART FIFO, LED interface, etc).
-3. Open the project, `terrestrial-drone`, stored in the github repo.
+      - the projects in the zip file can be opened in CCS to test out functionality.
+3. Open the project, `terrestrial-drone`, stored in the github repo, in CCS.
 4. Adding any functionality which use basic hardware functions must copy the header and c files from the zip's inc/ folder into the project, and then fix all include errors (by removing "../inc/" from includes)
+   - for example, if wishing to use UART on the USB, move UART0.c and UART0.h to the project folder and include UART0.h in drone_main.c
 
 ### Programming the Raspberry Pi
 1. Update pip: `pip3 install --upgrade pip setuptools wheel`. 
