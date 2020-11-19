@@ -84,16 +84,19 @@ policies, either expressed or implied, of the FreeBSD Project.
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
-#include "Bump.h"
-#include "Blinker.h"
-#include "Clock.h"
-#include "CortexM.h"
-#include "LaunchPad.h"
-#include "Motor.h"
-#include "Reflectance.h"
-#include "SysTickInts.h"
-#include "Tachometer.h"
-#include "UART0.h"
+#include <stdlib.h>
+#include <math.h>
+#include "..\..\tirslk_max_1_00_00\inc\Bump.h"
+#include "..\..\tirslk_max_1_00_00\inc\Blinker.h"
+#include "..\..\tirslk_max_1_00_00\inc\Clock.h"
+#include "..\..\tirslk_max_1_00_00\inc\CortexM.h"
+#include "..\..\tirslk_max_1_00_00\inc\LaunchPad.h"
+#include "..\..\tirslk_max_1_00_00\inc\Motor.h"
+#include "..\..\tirslk_max_1_00_00\inc\Reflectance.h"
+#include "..\..\tirslk_max_1_00_00\inc\SysTickInts.h"
+#include "..\..\tirslk_max_1_00_00\inc\Tachometer.h"
+#include "..\..\tirslk_max_1_00_00\inc\UART0.h"
+#include "..\..\tirslk_max_1_00_00\inc\UART1.h"
 
 typedef enum robot_state_t {
     OFF,
@@ -113,6 +116,7 @@ enum TachDirection RightDir;   // direction of right rotation (FORWARD, STOPPED,
 int32_t RightSteps;            // number of tachometer steps of right wheel (units of 220/360 = 0.61 mm traveled)
 robot_state_t state = OFF;
 char buffer[50];
+char response[2] = "R\0";
 char ch;
 bool UART_command_received = false;
 
@@ -141,7 +145,8 @@ void PrintBump(void){int i;
 }
 // printf (to PC) used for debugging
 void main(void){
-    int i;
+    int i = 0;
+    float temp = 0;
     DisableInterrupts();
     Clock_Init48MHz();    // set system clock to 48 MHz
     UART0_Initprintf();   // serial port channel to PC, with printf
@@ -181,145 +186,58 @@ void main(void){
             printf("Chars received: %s\n", buffer);
             UART_command_received = true;
         }
-        if (UART_command_received){
-            if (!strcmp(buffer, "OFF")) {
-                state = OFF;
-            } else if (!strcmp(buffer, "DRIVE_STRAIGHT")) {
-                state = DRIVE_STRAIGHT;
-            } else if (!strcmp(buffer, "TURN_90_RIGHT")) {
-                state = TURN_90_RIGHT;
-            } else if (!strcmp(buffer, "TURN_90_LEFT")) {
-                state = TURN_90_LEFT;
+        if (UART_command_received) {
+            if (buffer[0] == 'F') {
+                int face_right = atoi(buffer + 4);
+                buffer[4] = '\0';
+                int face_left = atoi(buffer + 1);
+                if (abs((face_left + face_right) / 2 - 127) < 15) {
+                    UART1_OutString(response);
+                    state = OFF;
+                } else if ((face_left + face_right) / 2 < 127) {
+                    state = TURN_90_LEFT;
+                    if (i <= 0) {
+                        temp = sqrt(127 - (face_left + face_right) / 2) * (3);
+                        printf("Value of turn: %f", temp);
+                        i = temp;
+                    }
+                } else if ((face_left + face_right) / 2 > 127) {
+                    state = TURN_90_RIGHT;
+                    if (i <= 0) {
+                        temp = sqrt((face_left + face_right) / 2 - 127) * (3);
+                        printf("Value of turn: %f", temp);
+                        i = temp;
+                    }
+                }
             }
+        } else if (i <= 0) {
+            state = OFF;
         }
-        PrintBump();
+        // PrintBump();
         switch (state) {
         case OFF:
             Motor_Stop();
             LaunchPad_Output(RED);
             break;
         case DRIVE_STRAIGHT:
-            Motor_Forward(3000, 3000);
+            Motor_Forward(2500, 2500);
             LaunchPad_Output(BLUE);
             break;
         case TURN_90_RIGHT:
             Blinker_Output(BK_RGHT);
-            Motor_Right(3000, 3000);
+            Motor_Right(2500, 2500);
             break;
         case TURN_90_LEFT:
             Blinker_Output(BK_LEFT);
-            Motor_Left(3000, 3000);
+            Motor_Left(2500, 2500);
             break;
         }
-        Clock_Delay1ms(62);
-
-//        Motor_Stop();
-//        printf("\n\rTI-RSLK MAX\n\r");
-//        printf("Press bump sensor to go\n\r");
-//        i = 0;
-//        LaunchPad_Output(RED);
-//        Blinker_Output(BK_RGHT+BK_LEFT+FR_RGHT+FR_LEFT);
-//        while(Bump_Read() != 0){
-//           Clock_Delay1ms(10);    // delay ~0.01 sec at 48 MHz
-//        }
-//        while(Bump_Read() == 0){   // flash the blue LED while not touched
-//          LaunchPad_Output(BLUE);
-//          Blinker_Output(BK_RGHT+BK_LEFT);
-//          Clock_Delay1ms(100);     // delay ~0.1 sec at 48 MHz
-//          LaunchPad_Output(0x00);
-//          Blinker_Output(0);
-//          Clock_Delay1ms(100);     // delay ~0.1 sec at 48 MHz
-//          i++;
-//          if((i%10)==0){ // slow down output
-//            int32_t tenths = Position%10;
-//            if(tenths<0)tenths = -tenths; // absolute value
-//            int32_t ones = Position/10;
-//            printf("Line sensor = %d.%1d mm\n\r",ones,tenths);
-//          }
-//        }
-//        printf("Release bump sensor\n\r");
-//        while(Bump_Read() != 0){   // flash the red LED while touched
-//           PrintBump();
-//           LaunchPad_Output(RED);
-//           Blinker_Output(BK_RGHT+BK_LEFT+FR_RGHT+FR_LEFT);
-//           Clock_Delay1ms(500);    // delay ~0.5 sec at 48 MHz
-//           LaunchPad_Output(0x00);
-//           Blinker_Output(0);
-//           Clock_Delay1ms(500);    // delay ~0.5 sec at 48 MHz
-//        }
-//        printf("Ready, set, ...");
-//        for(i=5; i; i=i-1){    // flash the yellow LED
-//          LaunchPad_Output(RED+GREEN);       // red LED is in bit 0, green LED is in bit 1
-//          Blinker_Output(FR_RGHT+FR_LEFT);
-//          Clock_Delay1ms(100);               // delay ~0.1 sec at 48 MHz
-//          LaunchPad_Output(0x00);
-//          LaunchPad_Output(0x00);
-//          Clock_Delay1ms(100);               // delay ~0.1 sec at 48 MHz
-//        }
-//        printf(" Forward both duty cycles are 3000/15000\n\r");
-//        Blinker_Output(FR_RGHT+FR_LEFT);
-//        i = 0;
-//        while(Bump_Read() == 0){// repeat the control code until the robot hits the wall
-//          LaunchPad_Output(GREEN);           // green LED is in bit 1
-//          Motor_Forward(3000, 3000);
-//          i++;
-//          if((i%25)==0){ // slow down output
-//            Tachometer_Get(&LeftTach, &LeftDir, &LeftSteps, &RightTach, &RightDir, &RightSteps);
-//          // (1/tach step/cycles) * (12,000,000 cycles/sec) * (60 sec/min) * (1/360 rotation/step)
-//            LeftSpeed = 2000000/LeftTach;
-//            RightSpeed = 2000000/RightTach;
-//            printf("Tachometer speed Left=%d, Right=%d rps\n\r",LeftSpeed,RightSpeed);
-//          }
-//          Clock_Delay1ms(62);              // delay ~0.062 sec at 48 MHz
-//        }
+        if (i > 0) {
+            i--;
+        }
+        if (i <= 0) {
+            UART1_OutString(response);
+        }
+        Clock_Delay1ms(10);
     }
 }
- /*test code
-// Voltage current and speed as a function of duty cycle
-#include "../inc/SSD1306.h"
-int main(void){
-  uint32_t duty;
-  Clock_Init48MHz();
-  LaunchPad_Init();   // built-in switches and LEDs
-  Tachometer_Init();
-  Blinker_Init();       // Blinker LED
-  Bump_Init();        // bump switches
-  Motor_Init(); // initialization
-  SysTick_Init(48000,3); // set up SysTick for 1kHz interrupts
-  Blinker_Output(FR_RGHT+FR_LEFT+BK_RGHT+BK_LEFT); LaunchPad_LED(1);LaunchPad_Output(0x07);
-  EnableInterrupts();    // SysTick is priority 3
-  for(int i=0;i<2;i++){
-    for(duty=3000; duty<=14999; duty=duty+2999){
-      while(Bump_Read()==0);  // wait for touch
-      Motor_Stop();   // measure current
-      Clock_Delay1ms(100);
-      while(Bump_Read());     // wait for release
-      Motor_Forward(duty,duty);  // measure current
-      Clock_Delay1ms(100);
-    }
-  }
-  SSD1306_Init(SSD1306_SWITCHCAPVCC);
-  SSD1306_DrawString(0,16,"123456789012345678901",WHITE);
-  SSD1306_DrawString(0,24,"abcdefghijklmnopqrstu",WHITE);
-  SSD1306_DrawString(0,32,"ABCDEFGHIJKLMNOPQRSTU",WHITE);
-  SSD1306_DrawString(0,40,"!@#$%^&*()_+-=",WHITE);
-  SSD1306_DrawString(0,48,"123456789012345678901",WHITE);
-  SSD1306_DrawString(0,56,"vwxyz,./<>?;'\"[]\\{}|",WHITE);
-  SSD1306_DisplayBuffer();
-  for(int i=0;i<2;i++){
-    for(duty=3000; duty<=14999; duty=duty+2999){
-      while(Bump_Read()==0);  // wait for touch
-      Motor_Stop();   // measure current
-      Clock_Delay1ms(100);
-      while(Bump_Read());     // wait for release
-      SSD1306_SetCursor(0,0);
-      SSD1306_OutString("duty =");
-      SSD1306_OutUDec(duty);
-      SSD1306_OutChar(CR);
-      Motor_Forward(duty,duty);  // measure current
-      Clock_Delay1ms(100);
-    }
-  }
-  while(1){};
-}
-*/

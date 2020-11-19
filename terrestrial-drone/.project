@@ -24,4 +24,37 @@
 		<nature>org.eclipse.cdt.core.ccnature</nature>
 		<nature>org.eclipse.cdt.managedbuilder.core.ScannerConfigNature</nature>
 	</natures>
+	<linkedResources>
+		<link>
+			<name>Clock.c</name>
+			<type>1</type>
+			<locationURI>copy_PARENT/inc/Clock.c</locationURI>
+		</link>
+		<link>
+			<name>CortexM.c</name>
+			<type>1</type>
+			<locationURI>copy_PARENT/inc/CortexM.c</locationURI>
+		</link>
+		<link>
+			<name>LaunchPad.c</name>
+			<type>1</type>
+			<locationURI>copy_PARENT/inc/LaunchPad.c</locationURI>
+		</link>
+		<link>
+			<name>SysTickInts.c</name>
+			<type>1</type>
+			<locationURI>copy_PARENT/inc/SysTickInts.c</locationURI>
+		</link>
+		<link>
+			<name>blinker.c</name>
+			<type>1</type>
+			<locationURI>copy_PARENT/inc/blinker.c</locationURI>
+		</link>
+	</linkedResources>
+	<variableList>
+		<variable>
+			<name>copy_PARENT</name>
+			<value>$%7BPARENT-2-PROJECT_LOC%7D/tirslk_max_1_00_00</value>
+		</variable>
+	</variableList>
 </projectDescription>
