@@ -86,17 +86,17 @@ policies, either expressed or implied, of the FreeBSD Project.
 #include <stdbool.h>
 #include <stdlib.h>
 #include <math.h>
-#include "..\..\tirslk_max_1_00_00\inc\Bump.h"
-#include "..\..\tirslk_max_1_00_00\inc\Blinker.h"
-#include "..\..\tirslk_max_1_00_00\inc\Clock.h"
-#include "..\..\tirslk_max_1_00_00\inc\CortexM.h"
-#include "..\..\tirslk_max_1_00_00\inc\LaunchPad.h"
-#include "..\..\tirslk_max_1_00_00\inc\Motor.h"
-#include "..\..\tirslk_max_1_00_00\inc\Reflectance.h"
-#include "..\..\tirslk_max_1_00_00\inc\SysTickInts.h"
-#include "..\..\tirslk_max_1_00_00\inc\Tachometer.h"
-#include "..\..\tirslk_max_1_00_00\inc\UART0.h"
-#include "..\..\tirslk_max_1_00_00\inc\UART1.h"
+#include "../../tirslk_max_1_00_00/inc/Bump.h"
+#include "../../tirslk_max_1_00_00/inc/Blinker.h"
+#include "../../tirslk_max_1_00_00/inc/Clock.h"
+#include "../../tirslk_max_1_00_00/inc/CortexM.h"
+#include "../../tirslk_max_1_00_00/inc/LaunchPad.h"
+#include "../../tirslk_max_1_00_00/inc/Motor.h"
+#include "../../tirslk_max_1_00_00/inc/Reflectance.h"
+#include "../../tirslk_max_1_00_00/inc/SysTickInts.h"
+#include "../../tirslk_max_1_00_00/inc/Tachometer.h"
+#include "../../tirslk_max_1_00_00/inc/UART0.h"
+#include "../../tirslk_max_1_00_00/inc/UART1.h"
 
 typedef enum robot_state_t {
     OFF,
