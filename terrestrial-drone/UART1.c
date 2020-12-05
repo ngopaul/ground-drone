@@ -47,7 +47,7 @@ policies, either expressed or implied, of the FreeBSD Project.
 // J1.4  from LaunchPad to Bluetooth (DIO2_RXD) (UART TxD){MSP432 P3.3}
 
 #include <stdint.h>
-#include "..\..\tirslk_max_1_00_00\inc\UART1.h"
+#include "../../tirslk_max_1_00_00/inc/UART1.h"
 #include "msp.h"
 
 #define FIFOSIZE   256       // size of the FIFOs (must be power of 2)

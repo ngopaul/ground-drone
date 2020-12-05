@@ -100,30 +100,21 @@ policies, either expressed or implied, of the FreeBSD Project.
 
 typedef enum robot_state_t {
     OFF,
-    DRIVE_STRAIGHT,
-    TURN_90_RIGHT,
-    TURN_90_LEFT,
+    USER_DO,
+    FIND_TARGET,
+    MATCH_TARGET
 } robot_state_t;
 
-
-uint16_t LeftSpeed;            // rotations per minute
-uint16_t RightSpeed;           // rotations per minute
-uint16_t LeftTach;             // tachometer period of left wheel (number of 0.0833 usec cycles to rotate 1/360 of a wheel rotation)
-enum TachDirection LeftDir;    // direction of left rotation (FORWARD, STOPPED, REVERSE)
-int32_t LeftSteps;             // number of tachometer steps of left wheel (units of 220/360 = 0.61 mm traveled)
-uint16_t RightTach;            // tachometer period of right wheel (number of 0.0833 usec cycles to rotate 1/360 of a wheel rotation)
-enum TachDirection RightDir;   // direction of right rotation (FORWARD, STOPPED, REVERSE)
-int32_t RightSteps;            // number of tachometer steps of right wheel (units of 220/360 = 0.61 mm traveled)
 robot_state_t state = OFF;
-char buffer[50];
-char response[2] = "R\0";
-char ch;
+char uart_command[50];
+char last_uart_command[50];
+uint32_t distance_to_target = 0; // 0 is unknown distance to target
 bool UART_command_received = false;
 
 volatile uint32_t Time;    // ms
 volatile uint8_t Data;     // QTR-8RC
 volatile int32_t Position; // -332 to +332 mm from line
-void SysTick_Handler(void){ // every 1ms
+void SysTick_Handler(void) { // every 1ms
   Time = Time + 1;
   if(Time%10==1){
     Reflectance_Start(); // start every 10ms
@@ -133,111 +124,145 @@ void SysTick_Handler(void){ // every 1ms
     Position = Reflectance_Position(Data);
   }
 }
-void PrintBump(void){int i;
-  printf("Bump switches: ");
-  uint32_t in = Bump_Read();
-  uint32_t mask = 0x01;
-  for(i=0;i<6;i++){
-    if(mask&in) printf("%d ",i);
-    mask = mask<<1;
-  }
-  printf("pressed\n\r");
+
+void PrintBump(void) {
+    int i;
+    printf("Bump switches: ");
+    uint32_t in = Bump_Read();
+    uint32_t mask = 0x01;
+    for(i=0;i<6;i++){
+        if(mask&in) printf("%d ",i);
+        mask = mask<<1;
+    }
+    printf("pressed\n\r");
 }
+
+bool ReceiveUART(void) {
+    char ch;
+    if (UART1_InStatus()) {
+        uint8_t buf_pos = 0;
+        printf("Collecting from UART: ");
+        fflush(stdout);
+        do {
+            ch = UART1_InChar();
+            printf("%c", ch);
+            uart_command[buf_pos] = ch;
+            buf_pos ++;
+        } while (ch != '\0' && buf_pos < 50);
+        printf("\nFinished collecting.\n");
+        // clear the UART buffer
+        printf("Clearing: ");
+        fflush(stdout);
+        while (UART1_InStatus()) {
+            ch = UART1_InChar();
+            printf("%c", ch);
+        }
+        printf("\n");
+        // make sure the string is terminated
+        uart_command[buf_pos] = '\0';
+        printf("Chars received: %s\n", uart_command);
+        return true;
+    }
+    return false;
+}
+
+void UpdateStateAndCommand(void) {
+    if (UART_command_received) {
+        if (uart_command[0] == 'U') {
+            state = USER_DO;
+            strcpy(uart_command, last_uart_command);
+        } else if (uart_command[0] == '?') {
+            state = FIND_TARGET;
+            distance_to_target = 0;
+        } else if (uart_command[0] == 'F') {
+            state = MATCH_TARGET;
+        }
+    }
+}
+
 // printf (to PC) used for debugging
 void main(void){
     int i = 0;
     float temp = 0;
     DisableInterrupts();
     Clock_Init48MHz();    // set system clock to 48 MHz
-    UART0_Initprintf();   // serial port channel to PC, with printf
+    // UART0_Initprintf();   // serial port channel to PC, with printf
     UART1_Init(); // init UART communication with RPi
     LaunchPad_Init();
     Bump_Init();
-    Tachometer_Init();
     Blinker_Init();       // Blinker LED
     Motor_Init();
     Time = 0;
     Reflectance_Init();    // line sensor
     SysTick_Init(48000,3); // set up SysTick for 1kHz interrupts
     EnableInterrupts();    // SysTick is priority 3
+
     while(1) {
-        UART_command_received = false;
-        if (UART1_InStatus()) {
-            uint8_t buf_pos = 0;
-            printf("Collecting from UART: ");
-            fflush(stdout);
-            do {
-                ch = UART1_InChar();
-                printf("%c", ch);
-                buffer[buf_pos] = ch;
-                buf_pos ++;
-            } while (ch != '\0' && buf_pos < 50);
-            printf("\nFinished collecting.\n");
-            // clear the UART buffer
-            printf("Clearing: ");
-            fflush(stdout);
-            while (UART1_InStatus()) {
-                ch = UART1_InChar();
-                printf("%c", ch);
-            }
-            printf("\n");
-            // make sure the string is terminated
-            buffer[buf_pos] = '\0';
-            printf("Chars received: %s\n", buffer);
-            UART_command_received = true;
-        }
-        if (UART_command_received) {
-            if (buffer[0] == 'F') {
-                int face_right = atoi(buffer + 4);
-                buffer[4] = '\0';
-                int face_left = atoi(buffer + 1);
-                if (abs((face_left + face_right) / 2 - 127) < 15) {
-                    UART1_OutString(response);
-                    state = OFF;
-                } else if ((face_left + face_right) / 2 < 127) {
-                    state = TURN_90_LEFT;
-                    if (i <= 0) {
-                        temp = sqrt(127 - (face_left + face_right) / 2) * (3);
-                        printf("Value of turn: %f", temp);
-                        i = temp;
+        // PrintBump();
+        UART_command_received = ReceiveUART();
+        switch (state) {
+            case OFF:
+                // Turn off the motors, make the servo point straight ahead.
+                Motor_Stop();
+                LaunchPad_Output(RED);
+                UpdateStateAndCommand();
+                break;
+            case USER_DO:
+                // Do the last uart command, which should have a U starting in it.
+                int left_drive_val = 0;
+                int right_drive_val = 0;
+                /* the uart command string should be formatted like so:
+                 * [0]: U
+                 * [1]: 0 or 1, depending on if trying to drive forward
+                 * [2]: 0 or 1, depending on if trying to drive backward
+                 * [3]: 0 or 1, depending on if trying to drive left
+                 * [4]: 0 or 1, depending on if trying to drive right
+                */
+                // parse the last uart command
+                if (last_uart_command[0] == 'U' && strlen(last_uart_command) == 5) {
+                    if (last_uart_command[1] == '1') {
+                        left_drive_val = left_drive_val + 3000;
+                        right_drive_val = right_drive_val + 3000;
                     }
-                } else if ((face_left + face_right) / 2 > 127) {
-                    state = TURN_90_RIGHT;
-                    if (i <= 0) {
-                        temp = sqrt((face_left + face_right) / 2 - 127) * (3);
-                        printf("Value of turn: %f", temp);
-                        i = temp;
+                    if (last_uart_command[2] == '1') {
+                        left_drive_val = left_drive_val - 3000;
+                        right_drive_val = right_drive_val - 3000;
+                    }
+                    if (last_uart_command[3] == '1') {
+                        left_drive_val = left_drive_val - 2000;
+                        right_drive_val = right_drive_val + 2000;
+                    }
+                    if (last_uart_command[4] == '1') {
+                        left_drive_val = left_drive_val + 2000;
+                        right_drive_val = right_drive_val - 2000;
                     }
                 }
-            }
-        } else if (i <= 0) {
-            state = OFF;
+                // Drive the motors
+                if (left_drive_val > 0 && right_drive_val > 0) {
+                    Motor_Forward((uint16_t) left_drive_val, (uint16_t) right_drive_val);
+                } else if (left_drive_val > 0 && right_drive_val < 0) {
+                    Motor_Left((uint16_t) left_drive_val, (uint16_t) -right_drive_val);
+                } else if (left_drive_val < 0 && right_drive_val > 0) {
+                    Motor_Right((uint16_t) -left_drive_val, (uint16_t) right_drive_val);
+                } else if (left_drive_val < 0 && right_drive_val < 0) {
+                    Motor_Backward((uint16_t) -left_drive_val, (uint16_t) -right_drive_val);
+                }
+                LaunchPad_Output(BLUE);
+                UpdateStateAndCommand();
+                break;
+            case FIND_TARGET:
+                // turn slowly until receiving a message which gives the location of the object
+                Blinker_Output(BK_RGHT);
+                Motor_Right(1500, 1500);
+                UpdateStateAndCommand();
+                break;
+            case MATCH_TARGET:
+                // get estimation of distance to target based on information in the uart message (do some math, or use the rangefinder)
+
+                // move properly based on more math
+
+                break;
         }
-        // PrintBump();
-        switch (state) {
-        case OFF:
-            Motor_Stop();
-            LaunchPad_Output(RED);
-            break;
-        case DRIVE_STRAIGHT:
-            Motor_Forward(2500, 2500);
-            LaunchPad_Output(BLUE);
-            break;
-        case TURN_90_RIGHT:
-            Blinker_Output(BK_RGHT);
-            Motor_Right(2500, 2500);
-            break;
-        case TURN_90_LEFT:
-            Blinker_Output(BK_LEFT);
-            Motor_Left(2500, 2500);
-            break;
-        }
-        if (i > 0) {
-            i--;
-        }
-        if (i <= 0) {
-            UART1_OutString(response);
-        }
-        Clock_Delay1ms(10);
+        Clock_Delay1ms(10); // necessary for receiving UART information
     }
 }
