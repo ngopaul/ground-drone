@@ -98,6 +98,8 @@ policies, either expressed or implied, of the FreeBSD Project.
 #include "../../tirslk_max_1_00_00/inc/UART0.h"
 #include "../../tirslk_max_1_00_00/inc/UART1.h"
 
+#include "Servo.h"
+
 typedef enum robot_state_t {
     OFF,
     USER_DO,
@@ -105,10 +107,15 @@ typedef enum robot_state_t {
     MATCH_TARGET
 } robot_state_t;
 
+float millimeters_per_tach_step = 6.20676363;
+float millimeters_track_length = 142.0; // https://en.wikipedia.org/wiki/Wheelbase
+
 robot_state_t state = OFF;
 char uart_command[50];
 char last_uart_command[50];
-uint32_t distance_to_target = 0; // 0 is unknown distance to target
+uint32_t distance_to_target = 0; // 0 = unknown. Distance in centimeters
+int angle_to_target = 0; // angle to target, ranging from -200 to +200 degrees according to the robot body
+uint16_t servo_pos = 50;
 bool UART_command_received = false;
 
 volatile uint32_t Time;    // ms
@@ -166,6 +173,18 @@ bool ReceiveUART(void) {
     return false;
 }
 
+uint32_t GetDistanceToTarget(target_left, target_right) { // TODO fix
+    // return target distance in centimeters
+    return (target_left - target_right) * 50;
+}
+
+uint32_t GetAngleToTarget(target_left, target_right) { // TODO fix
+    // return target angle from -200 to +20 relative to robot body
+    float angle_to_servo = sqrt(127 - (target_left + target_right) / 2) * (3);
+    float angle_to_car = ((float) servo_pos - 50.0) * (180.0 / 50.0) + angle_to_servo;
+    return (uint32_t) angle_to_car;
+}
+
 void UpdateStateAndCommand(void) {
     if (UART_command_received) {
         if (uart_command[0] == 'U') {
@@ -199,6 +218,7 @@ void main(void){
 
     while(1) {
         // PrintBump();
+        // Servo_Test();
         UART_command_received = ReceiveUART();
         switch (state) {
             case OFF:
@@ -258,11 +278,43 @@ void main(void){
                 break;
             case MATCH_TARGET:
                 // get estimation of distance to target based on information in the uart message (do some math, or use the rangefinder)
-
-                // move properly based on more math
-
+                if (buffer[0] == 'F') {
+                    int target_right = atoi(uart_command + 4);
+                    uart_command[4] = '\0';
+                    int target_left = atoi(uart_command + 1);
+                    // fix these two lines by getting actual measurements
+                    distance_to_target = GetDistanceToTarget(target_left, target_right); // in centimeters
+                    angle_to_target = GetAngleToTarget(target_left, target_right); // angle to car body
+                    // move properly based on distance_to_target, servo_pos, angle_to_target
+                    // TODO write movement calculation
+                }
+                UpdateStateAndCommand();
                 break;
         }
         Clock_Delay1ms(10); // necessary for receiving UART information
     }
+}
+
+void Servo_Test(void){
+  DisableInterrupts();
+  Clock_Init48MHz();    // set system clock to 48 MHz
+  LaunchPad_Init();
+  Servo_Init();
+  EnableInterrupts();    // SysTick is priority 3
+  while(1) {
+      Servo_Set(100);
+      Clock_Delay1ms(2000);
+      Servo_Set(0);
+      Clock_Delay1ms(2000);
+      uint16_t duty=0;
+      for(duty=0; duty<=100; duty=duty+1){
+            Servo_Set(duty);
+            Clock_Delay1ms(40);
+          }
+      for(duty=100; duty>=1; duty=duty-1){
+            Servo_Set(duty);
+            Clock_Delay1ms(40);
+      }
+      Servo_Set(100);
+  }
 }
