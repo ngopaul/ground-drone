@@ -98,6 +98,8 @@ policies, either expressed or implied, of the FreeBSD Project.
 #include "../../tirslk_max_1_00_00/inc/UART0.h"
 #include "../../tirslk_max_1_00_00/inc/UART1.h"
 
+#include "Servo.h"
+
 typedef enum robot_state_t {
     OFF,
     DRIVE_STRAIGHT,
@@ -161,6 +163,8 @@ void main(void){
     SysTick_Init(48000,3); // set up SysTick for 1kHz interrupts
     EnableInterrupts();    // SysTick is priority 3
     while(1) {
+
+        Servo_Test();
         UART_command_received = false;
         if (UART1_InStatus()) {
             uint8_t buf_pos = 0;
@@ -240,4 +244,28 @@ void main(void){
         }
         Clock_Delay1ms(10);
     }
+}
+
+void Servo_Test(void){
+  DisableInterrupts();
+  Clock_Init48MHz();    // set system clock to 48 MHz
+  LaunchPad_Init();
+  Servo_Init();
+  EnableInterrupts();    // SysTick is priority 3
+  while(1) {
+      Servo_Set(100);
+      Clock_Delay1ms(2000);
+      Servo_Set(0);
+      Clock_Delay1ms(2000);
+      uint16_t duty=0;
+      for(duty=0; duty<=100; duty=duty+1){
+            Servo_Set(duty);
+            Clock_Delay1ms(40);
+          }
+      for(duty=100; duty>=1; duty=duty-1){
+            Servo_Set(duty);
+            Clock_Delay1ms(40);
+      }
+      Servo_Set(100);
+  }
 }
