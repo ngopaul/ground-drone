@@ -102,7 +102,14 @@ policies, either expressed or implied, of the FreeBSD Project.
 
 typedef enum robot_state_t {
     OFF,
-    USER_DO,
+    USER_F,
+    USER_B,
+    USER_L,
+    USER_R,
+    USER_FL,
+    USER_FR,
+    USER_BL,
+    USER_BR,
     FIND_TARGET,
     MATCH_TARGET
 } robot_state_t;
@@ -111,13 +118,11 @@ float millimeters_per_tach_step = 6.20676363;
 float millimeters_track_length = 142.0; // https://en.wikipedia.org/wiki/Wheelbase
 
 robot_state_t state = OFF;
-char uart_command[50];
 char last_uart_command[50];
-
+char uart_command[50];
 
 int left_drive_val = 0;
 int right_drive_val = 0;
-
 
 int target_right;
 int target_left;
@@ -161,24 +166,32 @@ bool ReceiveUART(void) {
         do {
             ch = UART1_InChar();
             printf("%c", ch);
+            fflush(stdout);
             uart_command[buf_pos] = ch;
             buf_pos ++;
         } while (ch != '\0' && buf_pos < 49);
         printf("\nFinished collecting.\n");
-        if (buf_pos == 49) {
-            // clear the UART buffer
-            printf("Clearing: ");
+        Clock_Delay1ms(10);
+
+        printf("Clearing: ");
+        fflush(stdout);
+//        int characters_leftover = UART1_InStatus();
+//        for(int i = 0; i < characters_leftover; ++i) {
+        while(UART1_InStatus()) {
+            ch = UART1_InChar();
+            printf("%c", ch);
             fflush(stdout);
-            do {
-                ch = UART1_InChar();
-            } while (ch != '\0');
         }
         printf("\n");
+        Clock_Delay1ms(10);
+
         // make sure the string is terminated
         uart_command[buf_pos] = '\0';
         printf("Chars received: %s\n", uart_command);
+        Clock_Delay1ms(10);
         return true;
     }
+    Clock_Delay1ms(10);
     return false;
 }
 
@@ -203,44 +216,30 @@ uint32_t GetCarAngleToTarget(int target_left, int target_right) {
 
 void UpdateStateAndCommand(void) {
     // Will send robot to correct state, updating all relevant global variables
-    if (UART_command_received) {
-        if (uart_command[0] == 'U' && strlen(uart_command) == 5) {
-            state = USER_DO;
-            /* the uart command string should be formatted like so:
-             * [0]: U
-             * [1]: 0 or 1, depending on if trying to drive forward
-             * [2]: 0 or 1, depending on if trying to drive backward
-             * [3]: 0 or 1, depending on if trying to drive left
-             * [4]: 0 or 1, depending on if trying to drive right
-            */
-            if (uart_command[1] == '1') {
-                left_drive_val = left_drive_val + 3000;
-                right_drive_val = right_drive_val + 3000;
-            }
-            if (uart_command[2] == '1') {
-                left_drive_val = left_drive_val - 3000;
-                right_drive_val = right_drive_val - 3000;
-            }
-            if (uart_command[3] == '1') {
-                left_drive_val = left_drive_val - 2000;
-                right_drive_val = right_drive_val + 2000;
-            }
-            if (uart_command[4] == '1') {
-                left_drive_val = left_drive_val + 2000;
-                right_drive_val = right_drive_val - 2000;
-            }
-        } else if (uart_command[0] == '?') {
-            state = FIND_TARGET;
-            distance_to_target = 0;
-        } else if (uart_command[0] == 'F') {
-            target_right = atoi(uart_command + 4);
-            uart_command[4] = '\0';
-            target_left = atoi(uart_command + 1);
-            state = MATCH_TARGET;
-        }
-    } else {
-        state = OFF;
+    if (uart_command[0] == 'U' && strlen(uart_command) == 5) {
+        int forwardness = (uart_command[1] == '1') - (uart_command[2] == '1');
+        int turnness = (uart_command[4] == '1') - (uart_command[3] == '1');
+        printf("forwardness: %d, turnness: %d\n", forwardness, turnness);
+        if (forwardness == 0 && turnness == 0) state = OFF;
+        else if (forwardness ==  1 && turnness ==  0) state = USER_F;
+        else if (forwardness == -1 && turnness ==  0) state = USER_B;
+        else if (forwardness ==  0 && turnness == -1) state = USER_L;
+        else if (forwardness ==  0 && turnness ==  1) state = USER_R;
+        else if (forwardness ==  1 && turnness == -1) state = USER_FL;
+        else if (forwardness ==  1 && turnness ==  1) state = USER_FR;
+        else if (forwardness == -1 && turnness == -1) state = USER_BL;
+        else if (forwardness == -1 && turnness ==  1) state = USER_BR;
+    } else if (uart_command[0] == '?') {
+        state = FIND_TARGET;
+        distance_to_target = 0;
+    } else if (uart_command[0] == 'F' && strlen(uart_command) == 7) {
+//            strcpy(last_uart_command, uart_command);
+        target_right = atoi(uart_command + 4);
+        uart_command[4] = '\0';
+        target_left = atoi(uart_command + 1);
+        state = MATCH_TARGET;
     }
+
 }
 
 // printf (to PC) used for debugging
@@ -264,33 +263,57 @@ void main(void){
     while(1) {
         // PrintBump();
         // Servo_Test();
+//        DisableInterrupts();
+        Motor_Stop();
         UART_command_received = ReceiveUART();
+//        EnableInterrupts();
+        if (UART_command_received) {
+            UpdateStateAndCommand();
+        }
         switch (state) {
             case OFF:
                 // Turn off the motors, make the servo point straight ahead.
+//                Motor_Forward(2000,2000);
                 Motor_Stop();
                 LaunchPad_Output(RED);
-                UpdateStateAndCommand();
                 break;
-            case USER_DO:
-                // Drive the motors
-                if (left_drive_val > 0 && right_drive_val > 0) {
-                    Motor_Forward((uint16_t) left_drive_val, (uint16_t) right_drive_val);
-                } else if (left_drive_val > 0 && right_drive_val < 0) {
-                    Motor_Left((uint16_t) left_drive_val, (uint16_t) -right_drive_val);
-                } else if (left_drive_val < 0 && right_drive_val > 0) {
-                    Motor_Right((uint16_t) -left_drive_val, (uint16_t) right_drive_val);
-                } else if (left_drive_val < 0 && right_drive_val < 0) {
-                    Motor_Backward((uint16_t) -left_drive_val, (uint16_t) -right_drive_val);
-                }
+            case USER_F:
+                Motor_Forward(2000,2000);
                 LaunchPad_Output(BLUE);
-                UpdateStateAndCommand();
                 break;
+            case USER_B:
+                Motor_Backward(2000,2000);
+                LaunchPad_Output(BLUE);
+                break;
+            case USER_L:
+                Motor_Left(2000,2000);
+                LaunchPad_Output(BLUE);
+                break;
+            case USER_R:
+                Motor_Right(2000,2000);
+                LaunchPad_Output(BLUE);
+                break;
+            case USER_FL:
+                Motor_Forward(1500,2000);
+                LaunchPad_Output(BLUE);
+                break;
+            case USER_FR:
+                Motor_Forward(2000,1500);
+                LaunchPad_Output(BLUE);
+                break;
+            case USER_BL:
+                Motor_Backward(2000,1500);
+                LaunchPad_Output(BLUE);
+                break;
+            case USER_BR:
+                Motor_Backward(1500,2000);
+                LaunchPad_Output(BLUE);
+                break;
+
             case FIND_TARGET:
                 // turn slowly until receiving a message which gives the location of the object
                 Blinker_Output(BK_RGHT);
                 Motor_Right(1500, 1500);
-                UpdateStateAndCommand();
                 break;
             case MATCH_TARGET:
                 // get estimation of distance to target based on information in the uart message (do some math, or use the rangefinder)
@@ -306,7 +329,6 @@ void main(void){
                 Servo_Set(servo_pos);
                 // move properly based on distance_to_target, servo_pos, angle_to_target
                 // TODO write movement calculation
-                UpdateStateAndCommand();
                 break;
         }
         Clock_Delay1ms(10); // necessary for receiving UART information

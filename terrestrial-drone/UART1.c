@@ -1,6 +1,6 @@
 // UART1.c
 // Runs on MSP432
-// Use UCA2 to implement bidirectional data transfer to and from a
+// Use UCA3 to implement bidirectional data transfer to and from a
 // CC2650 BLE module, uses interrupts for receive and busy-wait for transmit
 
 // Daniel Valvano
@@ -41,8 +41,8 @@ policies, either expressed or implied, of the FreeBSD Project.
 */
 
 
-// UCA2RXD (VCP receive) connected to P3.2
-// UCA2TXD (VCP transmit) connected to P3.3
+// UCA3RXD (VCP receive) connected to P3.2
+// UCA3TXD (VCP transmit) connected to P3.3
 // J1.3  from Bluetooth (DIO3_TXD) to LaunchPad (UART RxD){MSP432 P3.2}
 // J1.4  from LaunchPad to Bluetooth (DIO2_RXD) (UART TxD){MSP432 P3.3}
 
@@ -91,7 +91,7 @@ uint32_t UART1_InStatus(void){
 // Output: none
 void UART1_Init(void){
   RxFifo_Init();              // initialize FIFOs
-  EUSCI_A2->CTLW0 = 0x0001;         // hold the USCI module in reset mode
+  EUSCI_A3->CTLW0 = 0x0001;         // hold the USCI module in reset mode
   // bit15=0,      no parity bits
   // bit14=x,      not used when parity is disabled
   // bit13=0,      LSB first
@@ -105,20 +105,24 @@ void UART1_Init(void){
   // bit2=0,       transmit data, not address (not used here)
   // bit1=0,       do not transmit break (not used here)
   // bit0=1,       hold logic in reset state while configuring
-  EUSCI_A2->CTLW0 = 0x00C1;
+  EUSCI_A3->CTLW0 = 0x00C1;
                               // set the baud rate
                               // N = clock/baud rate = 12,000,000/115,200 = 104.1667
-  EUSCI_A2->BRW = 104;        // UCBR = baud rate = int(N) = 104
+//  EUSCI_A3->BRW = 104;        // UCBR = baud rate = int(N) = 104
+  EUSCI_A3->BRW = 6;        // UCBR = baud rate = int(N) = 104
+//    EUSCI_A3->BRW = 26;        // UCBR = baud rate = int(N) = 104
 
-  EUSCI_A2->MCTLW = 0x0000;   // clear first and second modulation stage bit fields
+//  EUSCI_A3->MCTLW = 0x0000;   // clear first and second modulation stage bit fields
+  EUSCI_A3->MCTLW = 0x2081;   // clear first and second modulation stage bit fields
+//  EUSCI_A3->MCTLW = 0x6f01;   // clear first and second modulation stage bit fields
 // since TxFifo is empty, we initially disarm interrupts on UCTXIFG, but arm it on OutChar
-  P3->SEL0 |= 0x0C;
-  P3->SEL1 &= ~0x0C;          // configure P3.3 and P3.2 as primary module function
+  P9->SEL0 |= 0xC0;
+  P9->SEL1 &= ~0xC0;          // configure P3.3 and P3.2 as primary module function
   NVIC->IP[4] = (NVIC->IP[4]&0xFF00FFFF)|0x00400000; // priority 2
-  NVIC->ISER[0] = 0x00040000; // enable interrupt 18 in NVIC
-  EUSCI_A2->CTLW0 &= ~0x0001; // enable the USCI module
+  NVIC->ISER[0] = 0x00080000; // enable interrupt 18 in NVIC
+  EUSCI_A3->CTLW0 &= ~0x0001; // enable the USCI module
                               // enable interrupts on receive full
-  EUSCI_A2->IE = 0x0001;      // disable interrupts on transmit empty, start, complete
+  EUSCI_A3->IE = 0x0001;      // disable interrupts on transmit empty, start, complete
 }
 
 
@@ -138,15 +142,15 @@ uint8_t UART1_InChar(void){
 // Input: letter is an 8-bit data to be transferred
 // Output: none
 void UART1_OutChar(uint8_t data){
-  while((EUSCI_A2->IFG&0x02) == 0);
-  EUSCI_A2->TXBUF = data;
+  while((EUSCI_A3->IFG&0x02) == 0);
+  EUSCI_A3->TXBUF = data;
 }
 // interrupt 18 occurs on :
 // UCRXIFG RX data register is full
 // vector at 0x00000088 in startup_msp432.s
-void EUSCIA2_IRQHandler(void){
-  if(EUSCI_A2->IFG&0x01){             // RX data register full
-    RxFifo_Put((uint8_t)EUSCI_A2->RXBUF);// clears UCRXIFG
+void EUSCIA3_IRQHandler(void){
+  if(EUSCI_A3->IFG&0x01){             // RX data register full
+    RxFifo_Put((uint8_t)EUSCI_A3->RXBUF);// clears UCRXIFG
   } 
 }
 
@@ -166,5 +170,5 @@ void UART1_OutString(uint8_t *pt){
 // Output: none
 void UART1_FinishOutput(void){
   // Wait for entire tx message to be sent
-  while((EUSCI_A2->IFG&0x02) == 0);
+  while((EUSCI_A3->IFG&0x02) == 0);
 }
