@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include "msp.h"
-#include "../inc/CortexM.h"
-#include "../inc/PWM.h"
+#include "../../tirslk_max_1_00_00/inc/CortexM.h"
+#include "../../tirslk_max_1_00_00/inc/PWM.h"
 
 uint16_t cur_pwm;
 

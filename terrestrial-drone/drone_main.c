@@ -113,6 +113,14 @@ float millimeters_track_length = 142.0; // https://en.wikipedia.org/wiki/Wheelba
 robot_state_t state = OFF;
 char uart_command[50];
 char last_uart_command[50];
+
+
+int left_drive_val = 0;
+int right_drive_val = 0;
+
+
+int target_right;
+int target_left;
 uint32_t distance_to_target = 0; // 0 = unknown. Distance in centimeters
 int angle_to_target = 0; // angle to target, ranging from -200 to +200 degrees according to the robot body
 uint16_t servo_pos = 50;
@@ -155,14 +163,15 @@ bool ReceiveUART(void) {
             printf("%c", ch);
             uart_command[buf_pos] = ch;
             buf_pos ++;
-        } while (ch != '\0' && buf_pos < 50);
+        } while (ch != '\0' && buf_pos < 49);
         printf("\nFinished collecting.\n");
-        // clear the UART buffer
-        printf("Clearing: ");
-        fflush(stdout);
-        while (UART1_InStatus()) {
-            ch = UART1_InChar();
-            printf("%c", ch);
+        if (buf_pos == 49) {
+            // clear the UART buffer
+            printf("Clearing: ");
+            fflush(stdout);
+            do {
+                ch = UART1_InChar();
+            } while (ch != '\0');
         }
         printf("\n");
         // make sure the string is terminated
@@ -173,29 +182,64 @@ bool ReceiveUART(void) {
     return false;
 }
 
-uint32_t GetDistanceToTarget(target_left, target_right) { // TODO fix
+uint32_t GetDistanceToTarget(int target_left, int target_right) { // TODO fix
     // return target distance in centimeters
     return (target_left - target_right) * 50;
 }
 
-uint32_t GetAngleToTarget(target_left, target_right) { // TODO fix
-    // return target angle from -200 to +20 relative to robot body
-    float angle_to_servo = sqrt(127 - (target_left + target_right) / 2) * (3);
+float GetServoAngleToTarget(int target_left, int target_right) {
+    float pixel_percent = (((float) target_left + (float) target_right) / 2.0) / 100.0;
+    float angle_to_servo = 68.902*atan(pixel_percent - 0.5)*180.0/3.1415926;
+    printf("angle to servo: %f\n", angle_to_servo);
+    return angle_to_servo;
+}
+
+uint32_t GetCarAngleToTarget(int target_left, int target_right) {
+    float angle_to_servo = GetServoAngleToTarget(target_left, target_right);
     float angle_to_car = ((float) servo_pos - 50.0) * (180.0 / 50.0) + angle_to_servo;
     return (uint32_t) angle_to_car;
 }
 
+
 void UpdateStateAndCommand(void) {
+    // Will send robot to correct state, updating all relevant global variables
     if (UART_command_received) {
-        if (uart_command[0] == 'U') {
+        if (uart_command[0] == 'U' && strlen(uart_command) == 5) {
             state = USER_DO;
-            strcpy(uart_command, last_uart_command);
+            /* the uart command string should be formatted like so:
+             * [0]: U
+             * [1]: 0 or 1, depending on if trying to drive forward
+             * [2]: 0 or 1, depending on if trying to drive backward
+             * [3]: 0 or 1, depending on if trying to drive left
+             * [4]: 0 or 1, depending on if trying to drive right
+            */
+            if (uart_command[1] == '1') {
+                left_drive_val = left_drive_val + 3000;
+                right_drive_val = right_drive_val + 3000;
+            }
+            if (uart_command[2] == '1') {
+                left_drive_val = left_drive_val - 3000;
+                right_drive_val = right_drive_val - 3000;
+            }
+            if (uart_command[3] == '1') {
+                left_drive_val = left_drive_val - 2000;
+                right_drive_val = right_drive_val + 2000;
+            }
+            if (uart_command[4] == '1') {
+                left_drive_val = left_drive_val + 2000;
+                right_drive_val = right_drive_val - 2000;
+            }
         } else if (uart_command[0] == '?') {
             state = FIND_TARGET;
             distance_to_target = 0;
         } else if (uart_command[0] == 'F') {
+            target_right = atoi(uart_command + 4);
+            uart_command[4] = '\0';
+            target_left = atoi(uart_command + 1);
             state = MATCH_TARGET;
         }
+    } else {
+        state = OFF;
     }
 }
 
@@ -208,6 +252,7 @@ void main(void){
     // UART0_Initprintf();   // serial port channel to PC, with printf
     UART1_Init(); // init UART communication with RPi
     LaunchPad_Init();
+    Servo_Init();
     Bump_Init();
     Blinker_Init();       // Blinker LED
     Motor_Init();
@@ -228,35 +273,6 @@ void main(void){
                 UpdateStateAndCommand();
                 break;
             case USER_DO:
-                // Do the last uart command, which should have a U starting in it.
-                int left_drive_val = 0;
-                int right_drive_val = 0;
-                /* the uart command string should be formatted like so:
-                 * [0]: U
-                 * [1]: 0 or 1, depending on if trying to drive forward
-                 * [2]: 0 or 1, depending on if trying to drive backward
-                 * [3]: 0 or 1, depending on if trying to drive left
-                 * [4]: 0 or 1, depending on if trying to drive right
-                */
-                // parse the last uart command
-                if (last_uart_command[0] == 'U' && strlen(last_uart_command) == 5) {
-                    if (last_uart_command[1] == '1') {
-                        left_drive_val = left_drive_val + 3000;
-                        right_drive_val = right_drive_val + 3000;
-                    }
-                    if (last_uart_command[2] == '1') {
-                        left_drive_val = left_drive_val - 3000;
-                        right_drive_val = right_drive_val - 3000;
-                    }
-                    if (last_uart_command[3] == '1') {
-                        left_drive_val = left_drive_val - 2000;
-                        right_drive_val = right_drive_val + 2000;
-                    }
-                    if (last_uart_command[4] == '1') {
-                        left_drive_val = left_drive_val + 2000;
-                        right_drive_val = right_drive_val - 2000;
-                    }
-                }
                 // Drive the motors
                 if (left_drive_val > 0 && right_drive_val > 0) {
                     Motor_Forward((uint16_t) left_drive_val, (uint16_t) right_drive_val);
@@ -278,16 +294,18 @@ void main(void){
                 break;
             case MATCH_TARGET:
                 // get estimation of distance to target based on information in the uart message (do some math, or use the rangefinder)
-                if (buffer[0] == 'F') {
-                    int target_right = atoi(uart_command + 4);
-                    uart_command[4] = '\0';
-                    int target_left = atoi(uart_command + 1);
-                    // fix these two lines by getting actual measurements
-                    distance_to_target = GetDistanceToTarget(target_left, target_right); // in centimeters
-                    angle_to_target = GetAngleToTarget(target_left, target_right); // angle to car body
-                    // move properly based on distance_to_target, servo_pos, angle_to_target
-                    // TODO write movement calculation
+                // fix these two lines by getting actual measurements
+                distance_to_target = GetDistanceToTarget(target_left, target_right); // in centimeters
+                float servo_angle_to_target = GetServoAngleToTarget(target_left, target_right); // angle to car body
+
+                if (servo_angle_to_target < 20 && servo_pos < 100) {
+                    servo_pos++;
+                } else if (servo_angle_to_target > -20 && servo_pos > 0) {
+                    servo_pos--;
                 }
+                Servo_Set(servo_pos);
+                // move properly based on distance_to_target, servo_pos, angle_to_target
+                // TODO write movement calculation
                 UpdateStateAndCommand();
                 break;
         }
