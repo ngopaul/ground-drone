@@ -3,3 +3,9 @@ __pycache__/*
 
 # Virtual Environment
 env
+
+# google drive sync
+*/desktop.ini
+
+# idea
+.idea/*

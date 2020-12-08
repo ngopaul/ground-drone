@@ -114,7 +114,7 @@ while True:
 	#	pass
 
         # ensure 4 fps
-	time.sleep(max(0, 4/10 - (end_frame_time - start_frame_time) / 1000))
+	time.sleep(max(0, int(1 / 10 - (end_frame_time - start_frame_time) / 1000)))
 
 # if we are not using a video file, stop the camera video stream
 if not args.get("video", False):
