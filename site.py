@@ -8,12 +8,12 @@ import serial
 import os
 import sys
 from flask import Flask, render_template, Response, request
+from filelock import Timeout, FileLock
 
 if sys.platform == 'linux' and os.uname().nodename == 'raspberrypi':
     ser = serial.Serial("/dev/ttyS0", 115200)
 app = Flask(__name__)
-
-mode = 0  # 0 is follower, 1 is user controlled
+lock = FileLock("lock.txt.lock", timeout=1)
 
 # define the lower and upper boundaries of the "green"
 # ball in the HSV color space, then initialize the
@@ -76,8 +76,14 @@ def process_frame(frame, follow=False):
         print(serial_value)
         serial_data = serial_value.encode('utf-8') + b"\0"
         if sys.platform == 'linux' and os.uname().nodename == 'raspberrypi':
-            ser.write(serial_data)
-
+            lock.acquire()
+            try:
+                # open(file_path, "a").write(serial_value)
+                ser.write(serial_data)
+            finally:
+                time.sleep(1)
+                lock.release()
+#            ser.write(serial_data)
     return frame
 
 
@@ -123,11 +129,14 @@ def user_page():
 
 @app.route('/postuser', methods=['POST'])
 def post_user_control():
-    serial_value = request.form['serial_value']
-    print(serial_value)
-    serial_data = serial_value.encode('utf-8') + b"\0"
-    if sys.platform == 'linux' and os.uname().nodename == 'raspberrypi':
-        ser.write(serial_data)
+    with lock:
+        serial_value = request.form['serial_value']
+        print(serial_value)
+        if serial_value[0] == 'U' and len(serial_value) == 5:
+            serial_data = serial_value.encode('utf-8') + b"\0"
+            if sys.platform == 'linux' and os.uname().nodename == 'raspberrypi':
+                ser.write(serial_data)
+                time.sleep(0.5)
     return ""
 
 
