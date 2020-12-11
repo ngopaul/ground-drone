@@ -99,6 +99,7 @@ policies, either expressed or implied, of the FreeBSD Project.
 #include "../../tirslk_max_1_00_00/inc/UART1.h"
 
 #include "Servo.h"
+#include "PID.h"
 
 typedef enum robot_state_t {
     OFF,
@@ -242,6 +243,9 @@ void UpdateStateAndCommand(void) {
         state = OFF;
     }
 }
+void timer_Test(void) {
+    printf("testing...\n");
+}
 
 // printf (to PC) used for debugging
 void main(void){
@@ -259,7 +263,11 @@ void main(void){
     Time = 0;
     Reflectance_Init();    // line sensor
     SysTick_Init(48000,3); // set up SysTick for 1kHz interrupts
+    Tachometer_Init();
     EnableInterrupts();    // SysTick is priority 3
+
+
+    PID_Test();
 
     while(1) {
         // PrintBump();
@@ -335,4 +343,8 @@ void Servo_Test(void){
       }
       Servo_Set(100);
   }
+}
+
+void PID_Test(void) {
+    set_velocity(80, 20); // between 20 (5000 PWM) and 50 (10000 PWM);
 }
