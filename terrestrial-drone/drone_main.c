@@ -242,9 +242,6 @@ void UpdateStateAndCommand(void) {
     }
 
 }
-void timer_Test(void) {
-    printf("testing...\n");
-}
 
 // printf (to PC) used for debugging
 void main(void){
@@ -265,14 +262,25 @@ void main(void){
     Tachometer_Init();
     EnableInterrupts();    // SysTick is priority 3
 
-
-    PID_Test();
+//    PID_Test();
+    set_velocity(70, 70);
 
     while(1) {
+//        Motor_Forward(5000, 5000);
+        handle_pid(i);
+
+        if (i ==500) {
+            set_velocity(-70, -70);
+        }
+        else if (i== 1000) {
+            set_velocity(70,-70);
+        }
+        else if (i== 1500) {
+            set_velocity(-70,70);
+        }
         // PrintBump();
         // Servo_Test();
 //        DisableInterrupts();
-        Motor_Stop();
         UART_command_received = ReceiveUART();
 //        EnableInterrupts();
         if (UART_command_received) {
@@ -282,7 +290,7 @@ void main(void){
             case OFF:
                 // Turn off the motors, make the servo point straight ahead.
 //                Motor_Forward(2000,2000);
-                Motor_Stop();
+//                Motor_Stop();
                 LaunchPad_Output(RED);
                 break;
             case USER_F:
@@ -339,6 +347,7 @@ void main(void){
                 // TODO write movement calculation
                 break;
         }
+        i++;
         Clock_Delay1ms(10); // necessary for receiving UART information
     }
 }
@@ -369,4 +378,6 @@ void Servo_Test(void){
 
 void PID_Test(void) {
     set_velocity(80, 20); // between 20 (5000 PWM) and 50 (10000 PWM);
+    Clock_Delay1ms(1000);
+    set_velocity(-100, -100);
 }
